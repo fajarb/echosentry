@@ -3,11 +3,12 @@ package echosentry
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"runtime/debug"
 
-	"github.com/labstack/echo"
 	"github.com/getsentry/raven-go"
+	"github.com/labstack/echo"
 )
 
 // Sentry struct holding the raven client and some of its configs
@@ -74,8 +75,19 @@ func Middleware() echo.MiddlewareFunc {
 						sentry.Tags = tagsFunc(c)
 					}
 
+					// extract body
+					var bodyBytes []byte
+					if c.Request().Body != nil {
+						bodyBytes, _ = ioutil.ReadAll(c.Request().Body)
+					}
+
 					// contruct the raven packet to be sent
-					packet := raven.NewPacket(errorMsg, stacktrace, httpContext)
+					var packet *raven.Packet
+					if len(bodyBytes) > 0 {
+						packet = raven.NewPacketWithExtra(errorMsg, raven.Extra{"requestBody": string(bodyBytes)}, stacktrace, httpContext)
+					} else {
+						packet = raven.NewPacket(errorMsg, stacktrace, httpContext)
+					}
 
 					// capture it and send.
 					sentry.RavenClient.Capture(packet, sentry.Tags)
